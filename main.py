@@ -19,6 +19,8 @@ def main():
     logger.info("System Starting...")
 
     # 1. Setup Directories
+    logger.info(f"Config: Local Buffer = {LOCAL_TEMP_BUFFER}")
+    logger.info(f"Config: Remote Storage = {REMOTE_SERVER_STORAGE}")
     FileService.ensure_directory(LOCAL_TEMP_BUFFER)
     FileService.ensure_directory(REMOTE_SERVER_STORAGE)
 

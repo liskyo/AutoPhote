@@ -208,8 +208,8 @@ class DashboardApp:
             entry.insert(0, path)
 
     def setup_settings_tab(self):
-        import config # Late import to access save logic if needed, or just use config variables
-        from config import save_settings, load_settings, CAMERA_IPS, CAMERA_COUNT, CAMERA_WIDTH, CAMERA_HEIGHT, LOCAL_TEMP_BUFFER, REMOTE_SERVER_STORAGE
+        import config 
+        from config import save_settings, load_settings, CAMERA_IPS, CAMERA_COUNT, CAMERA_WIDTH, CAMERA_HEIGHT, JPEG_QUALITY, LOCAL_TEMP_BUFFER, REMOTE_SERVER_STORAGE
 
         # Center the settings form - Use pack to fill
         container = tk.Frame(self.settings_frame, bg=self.colors["bg"])
@@ -242,6 +242,12 @@ class DashboardApp:
         self.ent_cam_height = ttk.Entry(res_box, width=8)
         self.ent_cam_height.insert(0, str(CAMERA_HEIGHT))
         self.ent_cam_height.pack(side=tk.LEFT)
+
+        # Row 1: JPEG Quality
+        ttk.Label(grp_cam, text="JPEG Quality (壓縮品質 1-100):", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        self.ent_quality = ttk.Entry(grp_cam, width=10)
+        self.ent_quality.insert(0, str(JPEG_QUALITY))
+        self.ent_quality.grid(row=1, column=1, sticky="w", padx=5)
 
         # --- Group 2: Paths ---
         grp_path = ttk.LabelFrame(container, text=" Storage Paths ", padding=15)
@@ -301,6 +307,11 @@ class DashboardApp:
             new_count = int(self.ent_cam_count.get())
             new_w = int(self.ent_cam_width.get())
             new_h = int(self.ent_cam_height.get())
+            
+            new_quality = int(self.ent_quality.get())
+            if not (1 <= new_quality <= 100):
+                raise ValueError("Quality must be between 1 and 100")
+
             new_local = self.ent_local_path.get().strip()
             new_remote = self.ent_remote_path.get().strip()
             
@@ -314,6 +325,7 @@ class DashboardApp:
                 "camera_count": new_count,
                 "camera_width": new_w,
                 "camera_height": new_h,
+                "jpeg_quality": new_quality,
                 "local_temp_buffer": new_local,
                 "remote_server_storage": new_remote,
                 "camera_ips": new_ips

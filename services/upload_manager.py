@@ -57,10 +57,10 @@ class UploadManager:
             # Simulate Network delay
             time.sleep(0.5)
             
-            # Try moving file
-            if FileService.move_file(file_path, REMOTE_SERVER_STORAGE):
+            # Try copying file (Keep local)
+            if FileService.copy_file(file_path, REMOTE_SERVER_STORAGE):
                 success = True
-                logger.info(f"Upload success: {file_path}")
+                logger.info(f"Upload success (Copied): {file_path}")
             else:
                 attempt += 1
                 logger.warning(f"Upload failed. Retrying in {UPLOAD_RETRY_DELAY}s...")

@@ -18,3 +18,4 @@ settings.json
 *.spec
 dist/
 build/
+Server_Storage/

@@ -109,8 +109,9 @@ class CaptureManager:
                 self.update_cam_status_callback(i, 1) # Reset to Ready
 
     def _save_and_queue(self, index, img, batch_id):
+        from config import JPEG_QUALITY
         filename = f"CAM{index+1}_{batch_id}.jpg"
-        saved_path = FileService.save_image(img, LOCAL_TEMP_BUFFER, filename)
+        saved_path = FileService.save_image(img, LOCAL_TEMP_BUFFER, filename, quality=JPEG_QUALITY)
         
         if saved_path:
             self.upload_queue.put(saved_path)
