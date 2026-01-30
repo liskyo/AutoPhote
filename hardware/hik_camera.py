@@ -110,6 +110,21 @@ class HikCamera(CameraBase):
             logger.error(f"Start Grabbing failed: {ret}")
             return False
 
+        # --- DIAGNOSTICS: Check actual parameters ---
+        try:
+            stFloatVal = MVCC_FLOATVALUE()
+            memset(byref(stFloatVal), 0, sizeof(MVCC_FLOATVALUE))
+            self.handle.MV_CC_GetFloatValue("ExposureTime", stFloatVal)
+            current_exposure = stFloatVal.fCurValue
+            
+            self.handle.MV_CC_GetFloatValue("Gain", stFloatVal)
+            current_gain = stFloatVal.fCurValue
+            
+            logger.info(f"DIAGNOSTICS - Cam {self.camera_id} | Exposure: {current_exposure} us | Gain: {current_gain}")
+        except:
+            logger.warning("Could not read diagnostic params.")
+        # --------------------------------------------
+
         self.connected = True
         logger.info(f"Camera {self.camera_id} connected successfully.")
         return True
@@ -148,26 +163,39 @@ class HikCamera(CameraBase):
             height = stFrameInfo.nHeight
             pixelType = stFrameInfo.enPixelType
             
-            # 3. Convert to Numpy/PIL
-            # Usually images are Bayer rg8 or Mono8, need converting to RGB
-            # We can use MV_CC_ConvertPixelType logic here if needed or just assume Mono/RGB
-            
-            # Simple approach: If Mono8, simple reshape. If Bayer, needs conversion.
-            # Assuming we set camera to Bayer or RGB in manufacturer tool. 
-            # For robustness, we copy raw data to a numpy array first.
-            data = np.ctypeslib.as_array(self.pData, shape=(height, width)) # This works for Mono8
-            
-            # If it's a color camera (BayerRG8), we might need OpenCV to demosaic, creating dependency.
-            # OR we can use the SDK's ConvertPixelType.
-            # For simplicity in this script, let's assume we capture Mono8 or handle Bayer later.
-            # But wait, user bought COLOR cameras (SGS200-10GC). They output BayerRG.
-            
-            # TODO: Add SDK PixelConvert to RGB888 here to ensure color image.
-            # Due to complexity of ctypes call for ConvertPixel, we'll assume we get raw bytes
-            # and wrap currently as simplified grayscale or raw. 
-            # In production, use MV_CC_ConvertPixelType API.
-            
-            img = Image.fromarray(data)
-            return img.convert("RGB") # Just to verify flow
+            logger.info(f"Frame Captured: {width}x{height} | PayloadSize: {self.nPayloadSize} | PixelType: {pixelType}")
+
+            # Check for insane dimensions
+            if width > 20000 or height > 20000:
+                logger.error(f"Insane dimensions: {width}x{height}. Rejecting.")
+                raise Exception(f"Invalid dimensions: {width}x{height}")
+
+            try:
+                # 3. Handle Raw Data
+                # Use string_at to create a deep copy of the raw bytes immediately
+                # This ensures we are not dependent on the SDK buffer pointer's lifecycle
+                raw_bytes = ctypes.string_at(self.pData, self.nPayloadSize)
+                
+                # --- DIAGNOSTICS: Check Pixel Values ---
+                # Check a few bytes to ensure it's not empty
+                if len(raw_bytes) > 0:
+                     first_byte = raw_bytes[0]
+                     logger.info(f"Raw Data Copied. Size: {len(raw_bytes)}. First byte: {first_byte}")
+                # ---------------------------------------
+
+                # Disable DecompressionBomb warning globally for this module
+                Image.MAX_IMAGE_PIXELS = None 
+                
+                # Create PIL Image directly from bytes
+                img = Image.frombytes('L', (width, height), raw_bytes)
+                
+                # Convert to RGB 
+                img_rgb = img.convert("RGB")
+                
+                return img_rgb
+                
+            except Exception as e:
+                logger.error(f"Image processing failed: {e}")
+                raise e
         else:
              raise Exception(f"GetFrame failed: {ret}")

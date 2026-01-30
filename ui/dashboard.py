@@ -422,6 +422,9 @@ class DashboardApp:
         new_w = int(img_w * ratio)
         new_h = int(img_h * ratio)
         
+        if new_w <= 1 or new_h <= 1:
+            return # Canvas not ready
+
         resized = img_pil.resize((new_w, new_h), Image.Resampling.LANCZOS)
         tk_img = ImageTk.PhotoImage(resized)
         
@@ -437,7 +440,9 @@ class DashboardApp:
         screen_w = self.root.winfo_screenwidth()
         screen_h = self.root.winfo_screenheight()
         ratio = min(screen_w/img.size[0], screen_h/img.size[1])
-        new_size = (int(img.size[0]*ratio), int(img.size[1]*ratio))
+        new_w = max(1, int(img.size[0]*ratio))
+        new_h = max(1, int(img.size[1]*ratio))
+        new_size = (new_w, new_h)
         tk_img = ImageTk.PhotoImage(img.resize(new_size, Image.Resampling.LANCZOS))
         lbl = tk.Label(top, image=tk_img, bg="black")
         lbl.image = tk_img

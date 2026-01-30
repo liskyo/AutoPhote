@@ -58,9 +58,16 @@ class CaptureManager:
     def _capture_task(self, camera, index, batch_id, save_now):
         try:
             img = camera.grab_image()
+            logger.debug(f"Cam {index+1} Grab success. Type: {type(img)}")
             
             # --- OVERLAY TIMESTAMP ---
-            img = overlay_timestamp(img, camera_id=index+1)
+            try:
+                img = overlay_timestamp(img, camera_id=index+1)
+                logger.debug(f"Cam {index+1} Overlay success.")
+            except Exception as e_overlay:
+                logger.error(f"Cam {index+1} Overlay failed: {e_overlay}")
+                # Continue without overlay if it fails
+                pass
 
             # Update UI immediately for preview
             if self.update_cam_image_callback:

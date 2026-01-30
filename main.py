@@ -11,6 +11,10 @@ from services.capture_manager import CaptureManager
 from services.upload_manager import UploadManager
 from services.file_service import FileService
 from ui.dashboard import DashboardApp
+from PIL import Image, ImageFile
+# Allow large images globally
+Image.MAX_IMAGE_PIXELS = None
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 from utils.logger import setup_logger
 
 logger = setup_logger("Main")

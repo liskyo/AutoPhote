@@ -77,7 +77,7 @@ _raw_ips = _current_settings.get("camera_ips", {})
 CAMERA_IPS = {int(k): v for k, v in _raw_ips.items()}
 
 # Hardware Interface Settings
-USE_REAL_CAMERA = False  # Set to True when connecting real cameras
+USE_REAL_CAMERA = True  # Set to True when connecting real cameras
 
 # UI Settings
 UI_PREVIEW_WIDTH = 360

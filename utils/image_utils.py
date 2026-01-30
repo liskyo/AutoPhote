@@ -36,9 +36,8 @@ def overlay_timestamp(image, camera_id=None):
     outline_color = "black"
     text_color = "#00FF00" # Green
     
-    stroke_width = int(font_size / 15)
-    if stroke_width < 1: stroke_width = 1
-
-    draw.text((x, y), text, font=font, fill=text_color, stroke_width=stroke_width, stroke_fill=outline_color)
+    # draw.text((x, y), text, font=font, fill=text_color, stroke_width=stroke_width, stroke_fill=outline_color)
+    # Fallback to simple text due to "raster overflow" error in some PIL versions with large images
+    draw.text((x, y), text, font=font, fill=text_color)
 
     return image
