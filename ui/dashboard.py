@@ -15,10 +15,12 @@ STATUS_COLORS = {
 }
 
 class DashboardApp:
-    def __init__(self, root, on_snap, on_confirm, on_retake):
+    def __init__(self, root, on_snap, on_confirm, on_retake, capture_manager=None):
         self.root = root
         self.root.title("AutoPhote Operator Dashboard")
         self.root.configure(bg="#1e1e1e") # Dark Root
+        
+        self.capture_manager = capture_manager
         
         self.on_snap_cb = on_snap
         self.on_confirm_cb = on_confirm
@@ -94,10 +96,15 @@ class DashboardApp:
         style.configure("TEntry", fieldbackground=self.colors["surface"], foreground=self.colors["text"], bordercolor=self.colors["border"])
         
     def setup_ui(self):
-        try:
-            self.root.state('zoomed')
-        except:
-            pass 
+        # Fullscreen Mode (Aggressive)
+        def enforce_fullscreen():
+            self.root.attributes('-fullscreen', True)
+            self.root.state('zoomed') # Fallback for Windows
+            
+        self.root.after(100, enforce_fullscreen)
+        
+        self.root.bind("<F11>", lambda event: self.root.attributes("-fullscreen", not self.root.attributes("-fullscreen")))
+        self.root.bind("<Escape>", lambda event: self.root.attributes("-fullscreen", False)) # Escape to exit fullscreen 
 
         # Main Container
         main_container = tk.Frame(self.root, bg=self.colors["bg"])
@@ -120,6 +127,17 @@ class DashboardApp:
 
     def setup_monitor_tab(self):
         main_container = self.monitor_frame
+        
+        # Header Area
+        header_frame = tk.Frame(main_container, bg=self.colors["bg"])
+        header_frame.pack(fill=tk.X, pady=(10, 0), padx=5)
+        
+        # Monitor Title
+        tk.Label(header_frame, text="MONITOR SYSTEM (監控系統)", font=("Segoe UI", 16, "bold"), bg=self.colors["bg"], fg=self.colors["accent"]).pack(side=tk.LEFT, padx=5)
+
+        # Exit Button
+        tk.Button(header_frame, text="EXIT (離開程式)", bg="#d9534f", fg="white", font=("Segoe UI", 10, "bold"), 
+                 command=self.on_closing).pack(side=tk.RIGHT, padx=5)
         
         # Grid Area - Use a dark frame
         self.grid_frame = tk.Frame(main_container, bg=self.colors["bg"])
@@ -215,84 +233,131 @@ class DashboardApp:
         container = tk.Frame(self.settings_frame, bg=self.colors["bg"])
         container.pack(fill=tk.BOTH, expand=True, padx=50, pady=30)
         
-        tk.Label(container, text="SYSTEM CONFIGURATION", font=("Segoe UI", 18, "bold"), bg=self.colors["bg"], fg=self.colors["accent"]).pack(anchor="w", pady=(0, 20))
+        # Use a Canvas with Scrollbar for Settings to ensure it works on small screens
+        # Create a main scrollable frame
+        canvas = tk.Canvas(container, bg=self.colors["bg"], highlightthickness=0)
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, style="TFrame")
 
-        # --- Group 1: Camera Parameters ---
-        grp_cam = ttk.LabelFrame(container, text=" Camera Parameters ", padding=15)
-        grp_cam.pack(fill=tk.X, pady=10)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
-        # Grid layout for inputs
-        grp_cam.columnconfigure(1, weight=1)
-        grp_cam.columnconfigure(3, weight=1)
+        # Custom Style for Combobox to ensure visibility
+        style = ttk.Style()
+        style.configure('Custom.TCombobox', fieldbackground='white', background='white', foreground='black', arrowcolor='black')
+        self.root.option_add("*TCombobox*Listbox*Background", "white")
+        self.root.option_add("*TCombobox*Listbox*Foreground", "black")
+
+        # Title and Exit Button inside scrollable area
+        header_frame = tk.Frame(scrollable_frame, bg=self.colors["bg"])
+        header_frame.pack(fill=tk.X, pady=(0, 10))
         
-        # Row 0
-        ttk.Label(grp_cam, text="Camera Count (相機數量):", style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.ent_cam_count = ttk.Entry(grp_cam, width=10)
+        tk.Label(header_frame, text="SYSTEM CONFIGURATION (系統設定)", font=("Segoe UI", 18, "bold"), bg=self.colors["bg"], fg=self.colors["accent"]).pack(side=tk.LEFT)
+        
+        # Exit Button
+        tk.Button(header_frame, text="EXIT (離開程式)", bg="#d9534f", fg="white", font=("Segoe UI", 10, "bold"), 
+                 command=self.on_closing).pack(side=tk.RIGHT, padx=5)
+
+        # --- Group 1: Camera Parameters (Compact Single Row) ---
+        grp_cam = ttk.LabelFrame(scrollable_frame, text=" Camera Parameters (相機參數) ", padding=10)
+        grp_cam.pack(fill=tk.X, pady=5)
+        
+        # Grid layout: Col 0: Label, 1: Input | Col 2: Label, 3: Input | Col 4: Label, 5: Input
+        
+        # 1. Camera Count
+        ttk.Label(grp_cam, text="Count (數量):", style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=5)
+        self.ent_cam_count = ttk.Entry(grp_cam, width=5)
         self.ent_cam_count.insert(0, str(CAMERA_COUNT))
         self.ent_cam_count.grid(row=0, column=1, sticky="w", padx=5)
 
-        ttk.Label(grp_cam, text="Resolution (解析度 WxH):", style="Card.TLabel").grid(row=0, column=2, sticky="w", padx=5, pady=5)
-        res_box = tk.Frame(grp_cam, bg=self.colors["surface"])
-        res_box.grid(row=0, column=3, sticky="w", padx=5)
+        # 2. Resize Ratio
+        ttk.Label(grp_cam, text="Resize (縮放 %):", style="Card.TLabel").grid(row=0, column=2, sticky="w", padx=(20, 5))
+        self.resize_var = tk.StringVar()
+        self.cbo_resize = ttk.Combobox(grp_cam, textvariable=self.resize_var, width=5, state="readonly", style='Custom.TCombobox')
+        resize_options = ["100", "90", "80", "70", "60", "50", "30"]
+        self.cbo_resize['values'] = resize_options
         
-        self.ent_cam_width = ttk.Entry(res_box, width=8)
-        self.ent_cam_width.insert(0, str(CAMERA_WIDTH))
-        self.ent_cam_width.pack(side=tk.LEFT)
-        ttk.Label(res_box, text=" x ", style="Card.TLabel").pack(side=tk.LEFT)
-        self.ent_cam_height = ttk.Entry(res_box, width=8)
-        self.ent_cam_height.insert(0, str(CAMERA_HEIGHT))
-        self.ent_cam_height.pack(side=tk.LEFT)
+        from config import RESIZE_RATIO
+        # Ensure it's a string for comparison
+        target_resize = str(RESIZE_RATIO)
+        if target_resize in resize_options:
+            self.cbo_resize.set(target_resize)
+        else:
+            self.cbo_resize.current(2) # Index 2 is "80"
+            
+        self.cbo_resize.grid(row=0, column=3, sticky="w", padx=5)
 
-        # Row 1: JPEG Quality
-        ttk.Label(grp_cam, text="JPEG Quality (壓縮品質 1-100):", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        self.ent_quality = ttk.Entry(grp_cam, width=10)
-        self.ent_quality.insert(0, str(JPEG_QUALITY))
-        self.ent_quality.grid(row=1, column=1, sticky="w", padx=5)
+        # 3. JPEG Quality
+        ttk.Label(grp_cam, text="Quality (品質):", style="Card.TLabel").grid(row=0, column=4, sticky="w", padx=(20, 5))
+        self.quality_var = tk.StringVar()
+        self.cbo_quality = ttk.Combobox(grp_cam, textvariable=self.quality_var, width=5, state="readonly", style='Custom.TCombobox')
+        quality_options = ["100", "95", "90", "85", "80", "75", "70", "50"]
+        self.cbo_quality['values'] = quality_options
+        
+        from config import JPEG_QUALITY
+        target_quality = str(JPEG_QUALITY)
+        if target_quality in quality_options:
+            self.cbo_quality.set(target_quality)
+        else:
+            self.cbo_quality.current(4) # Index 4 is "80"
+            
+        self.cbo_quality.grid(row=0, column=5, sticky="w", padx=5)
 
         # --- Group 2: Paths ---
-        grp_path = ttk.LabelFrame(container, text=" Storage Paths ", padding=15)
-        grp_path.pack(fill=tk.X, pady=10)
+        grp_path = ttk.LabelFrame(scrollable_frame, text=" Storage Paths ", padding=10)
+        grp_path.pack(fill=tk.X, pady=5)
         grp_path.columnconfigure(1, weight=1)
 
         # Local
-        ttk.Label(grp_path, text="Local Buffer (暫存):", style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        self.ent_local_path = ttk.Entry(grp_path)
+        ttk.Label(grp_path, text="Local:", style="Card.TLabel").grid(row=0, column=0, sticky="w", padx=5)
+        self.ent_local_path = ttk.Entry(grp_path, width=50) # Increased width
         self.ent_local_path.insert(0, LOCAL_TEMP_BUFFER)
         self.ent_local_path.grid(row=0, column=1, sticky="ew", padx=5)
-        tk.Button(grp_path, text="SELECT", bg=self.colors["accent"], fg="white", font=("Segoe UI", 9, "bold"), relief="flat", 
+        tk.Button(grp_path, text="...", bg=self.colors["accent"], fg="white", font=("Segoe UI", 9, "bold"), relief="flat", width=3,
                  command=lambda: self.browse_directory(self.ent_local_path)).grid(row=0, column=2, padx=5)
         
         # Remote
-        ttk.Label(grp_path, text="Remote Server (遠端):", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        self.ent_remote_path = ttk.Entry(grp_path)
+        ttk.Label(grp_path, text="Remote:", style="Card.TLabel").grid(row=1, column=0, sticky="w", padx=5)
+        self.ent_remote_path = ttk.Entry(grp_path, width=50) # Increased width
         self.ent_remote_path.insert(0, REMOTE_SERVER_STORAGE)
         self.ent_remote_path.grid(row=1, column=1, sticky="ew", padx=5)
-        tk.Button(grp_path, text="SELECT", bg=self.colors["accent"], fg="white", font=("Segoe UI", 9, "bold"), relief="flat", 
+        tk.Button(grp_path, text="...", bg=self.colors["accent"], fg="white", font=("Segoe UI", 9, "bold"), relief="flat", width=3,
                  command=lambda: self.browse_directory(self.ent_remote_path)).grid(row=1, column=2, padx=5)
 
-        # --- Group 3: IP Config ---
-        grp_ip = ttk.LabelFrame(container, text=" IP Configuration ", padding=15)
-        grp_ip.pack(fill=tk.BOTH, expand=True, pady=10)
+        # --- Group 3: IP Config (Compact) ---
+        grp_ip = ttk.LabelFrame(scrollable_frame, text=" IP Configuration ", padding=10)
+        grp_ip.pack(fill=tk.BOTH, expand=True, pady=5)
         
         self.ip_entries = {}
-        # Dynamic Grid for IPs
-        columns = 4 # per row
+        # Simple Grid: 4 columns
+        # Cam 1 [___]  Cam 2 [___]
+        # Cam 3 [___]  Cam 4 [___]
+        
+        columns = 4 # 2 sets of (Label + Entry) per row = 4 cols
         for i in range(1, 9):
-            r = (i-1) // columns
-            c_base = ((i-1) % columns) * 2 
+            row = (i-1) // 2
+            col_offset = ((i-1) % 2) * 2
             
             lbl = ttk.Label(grp_ip, text=f"Cam {i}:", style="Card.TLabel")
-            lbl.grid(row=r, column=c_base, padx=(20 if c_base>0 else 5), pady=10, sticky="e")
+            lbl.grid(row=row, column=col_offset, padx=(5, 2), pady=5, sticky="e")
             
-            ent = ttk.Entry(grp_ip, width=14)
+            ent = ttk.Entry(grp_ip, width=12)
             val = CAMERA_IPS.get(i, "")
             ent.insert(0, val)
-            ent.grid(row=r, column=c_base+1, padx=5, pady=10, sticky="w")
+            ent.grid(row=row, column=col_offset+1, padx=2, pady=5, sticky="w")
             self.ip_entries[i] = ent
 
         # --- Actions ---
-        btn_frame = tk.Frame(container, bg=self.colors["bg"])
-        btn_frame.pack(fill=tk.X, pady=30, side=tk.BOTTOM)
+        btn_frame = tk.Frame(scrollable_frame, bg=self.colors["bg"])
+        btn_frame.pack(fill=tk.X, pady=20, side=tk.BOTTOM)
         
         # Make Save button full width (or at least prominent)
         btn_save = tk.Button(btn_frame, text="SAVE SETTINGS (儲存設定)", bg="lightgreen", fg="black", font=("Segoe UI", 12, "bold"), 
@@ -305,12 +370,10 @@ class DashboardApp:
         
         try:
             new_count = int(self.ent_cam_count.get())
-            new_w = int(self.ent_cam_width.get())
-            new_h = int(self.ent_cam_height.get())
             
-            new_quality = int(self.ent_quality.get())
-            if not (1 <= new_quality <= 100):
-                raise ValueError("Quality must be between 1 and 100")
+            # Read Resize and Quality from Dropdowns
+            new_resize_ratio = int(self.cbo_resize.get())
+            new_quality = int(self.cbo_quality.get())
 
             new_local = self.ent_local_path.get().strip()
             new_remote = self.ent_remote_path.get().strip()
@@ -321,10 +384,14 @@ class DashboardApp:
                 if val:
                     new_ips[str(i)] = val
             
+            # Load Constants for Dimensions (locked)
+            from config import CAMERA_WIDTH, CAMERA_HEIGHT
+
             payload = {
                 "camera_count": new_count,
-                "camera_width": new_w,
-                "camera_height": new_h,
+                "camera_width": CAMERA_WIDTH, 
+                "camera_height": CAMERA_HEIGHT,
+                "resize_ratio": new_resize_ratio,
                 "jpeg_quality": new_quality,
                 "local_temp_buffer": new_local,
                 "remote_server_storage": new_remote,
@@ -350,6 +417,10 @@ class DashboardApp:
             if self.notebook.index("current") != 0: return
         except: pass
         
+        # Stop preview before capturing high-res
+        if self.capture_manager:
+            self.capture_manager.stop_preview()
+            
         self.btn_snap.grid_remove()
         self.btn_retake.grid(row=1, column=0, sticky="nsew", padx=(20, 10), pady=20)
         self.btn_confirm.grid(row=1, column=1, sticky="nsew", padx=(10, 20), pady=20)
@@ -363,6 +434,11 @@ class DashboardApp:
         self.btn_retake.grid_remove()
         self.btn_confirm.grid_remove()
         self.btn_snap.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=20, pady=20)
+        
+        # Resume preview
+        if self.capture_manager:
+            self.capture_manager.start_preview()
+            
         if self.on_retake_cb: self.on_retake_cb()
 
     def handle_confirm(self):
@@ -373,7 +449,12 @@ class DashboardApp:
         self.btn_retake.grid_remove()
         self.btn_confirm.grid_remove()
         self.btn_snap.grid(row=1, column=0, columnspan=2, sticky="nsew", padx=20, pady=20)
+        
         if self.on_confirm_cb: self.on_confirm_cb()
+
+        # Resume preview after confirm action (which saves files)
+        if self.capture_manager:
+            self.capture_manager.start_preview()
 
     def update_camera_status(self, index, status_code):
         color_map = {
@@ -452,3 +533,9 @@ class DashboardApp:
 
     def update_upload_count(self, count):
         self.root.after(0, lambda: self.upload_count_var.set(f"Upload Queue: {count}"))
+
+    def on_closing(self):
+        """Handle application exit."""
+        if self.capture_manager:
+            self.capture_manager.stop_preview()
+        self.root.destroy()

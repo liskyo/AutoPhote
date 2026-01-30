@@ -70,10 +70,14 @@ def main():
         capture_mgr.discard_capture()
 
     # 5. Build UI
-    app = DashboardApp(root, on_snap=on_snap, on_confirm=on_confirm, on_retake=on_retake)
+    app = DashboardApp(root, on_snap=on_snap, on_confirm=on_confirm, on_retake=on_retake, capture_manager=capture_mgr)
 
     # 6. Start Background Services
     capture_mgr.initialize_cameras()
+    
+    # START AUTO PREVIEW
+    capture_mgr.start_preview()
+    
     upload_mgr.start()
 
     # 7. Cleanup on Close

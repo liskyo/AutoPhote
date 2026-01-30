@@ -32,6 +32,10 @@ class HikCamera(CameraBase):
         # Buffer for raw data
         self.pData = None
         self.nPayloadSize = 0
+        
+        # Streaming State
+        self.streaming = False
+        self.stream_thread = None
 
     def connect(self):
         if not HIK_SDK_AVAILABLE:
@@ -171,31 +175,109 @@ class HikCamera(CameraBase):
                 raise Exception(f"Invalid dimensions: {width}x{height}")
 
             try:
-                # 3. Handle Raw Data
-                # Use string_at to create a deep copy of the raw bytes immediately
-                # This ensures we are not dependent on the SDK buffer pointer's lifecycle
-                raw_bytes = ctypes.string_at(self.pData, self.nPayloadSize)
+                # 3. Handle data with Color Conversion
+                # Use SDK to convert Bayer/Mono to RGB8Packed
+                PixelType_Gvsp_RGB8_Packed = 0x02180014 # Constant
                 
-                # --- DIAGNOSTICS: Check Pixel Values ---
-                # Check a few bytes to ensure it's not empty
-                if len(raw_bytes) > 0:
-                     first_byte = raw_bytes[0]
-                     logger.info(f"Raw Data Copied. Size: {len(raw_bytes)}. First byte: {first_byte}")
-                # ---------------------------------------
-
-                # Disable DecompressionBomb warning globally for this module
-                Image.MAX_IMAGE_PIXELS = None 
+                nRGBSize = width * height * 3
+                # Allocate ctypes buffer for RGB
+                pRGBBuf = (ctypes.c_ubyte * nRGBSize)()
                 
-                # Create PIL Image directly from bytes
-                img = Image.frombytes('L', (width, height), raw_bytes)
+                stConvertParam = MV_CC_PIXEL_CONVERT_PARAM()
+                memset(byref(stConvertParam), 0, sizeof(stConvertParam))
+                stConvertParam.nWidth = width
+                stConvertParam.nHeight = height
+                stConvertParam.pSrcData = self.pData
+                stConvertParam.nSrcDataLen = self.nPayloadSize
+                stConvertParam.enSrcPixelType = pixelType
+                stConvertParam.enDstPixelType = PixelType_Gvsp_RGB8_Packed
+                stConvertParam.pDstBuffer = cast(pRGBBuf, POINTER(ctypes.c_ubyte))
+                stConvertParam.nDstBufferSize = nRGBSize
                 
-                # Convert to RGB 
-                img_rgb = img.convert("RGB")
+                ret_conv = self.handle.MV_CC_ConvertPixelType(stConvertParam)
                 
-                return img_rgb
+                if ret_conv == 0:
+                    # Conversion Success -> Create RGB Image
+                    # Disable DecompressionBomb warning globally for this module
+                    Image.MAX_IMAGE_PIXELS = None
+                    
+                    rgb_bytes = ctypes.string_at(pRGBBuf, nRGBSize)
+                    img = Image.frombytes('RGB', (width, height), rgb_bytes)
+                    
+                    # Log once to confirm color works (debug)
+                    # logger.info(f"Converted to RGB8. Size: {len(rgb_bytes)}")
+                    return img
                 
+                else:
+                    logger.warning(f"Color conversion failed (ret={hex(ret_conv)}), falling back to Mono/Raw")
+                    # Fallback to original logic
+                    raw_bytes = ctypes.string_at(self.pData, self.nPayloadSize)
+                    Image.MAX_IMAGE_PIXELS = None 
+                    img = Image.frombytes('L', (width, height), raw_bytes)
+                    return img.convert("RGB")
+                    
             except Exception as e:
                 logger.error(f"Image processing failed: {e}")
                 raise e
         else:
              raise Exception(f"GetFrame failed: {ret}")
+
+    # --- Streaming Support ---
+    def start_streaming(self, callback):
+        """
+        Start a background thread to capture and callback low-res preview images.
+        callback(camera_id, pil_image)
+        """
+        if self.streaming:
+            return
+            
+        logger.info(f"Camera {self.camera_id} starting preview stream...")
+        self.streaming = True
+        self.stream_thread = threading.Thread(target=self._preview_loop, args=(callback,), daemon=True)
+        self.stream_thread.start()
+
+    def stop_streaming(self):
+        """
+        Stop the preview stream and wait for thread to join.
+        """
+        if not self.streaming:
+            return
+            
+        logger.info(f"Camera {self.camera_id} stopping preview stream...")
+        self.streaming = False
+        if self.stream_thread:
+            self.stream_thread.join(timeout=2.0)
+            self.stream_thread = None
+
+    def _preview_loop(self, callback):
+        while self.streaming:
+            try:
+                # Reuse existing grab_image logic 
+                # (Ideally we would have a lighter 'grab_frame' without deep copying for preview, 
+                #  but for stability let's stick to the working grab_image)
+                start_time = time.time()
+                
+                # We can suppress errors here to avoid spamming logs during preview
+                try:
+                    img = self.grab_image()
+                except Exception:
+                    time.sleep(0.5)
+                    continue
+
+                if not self.streaming: break
+
+                # Resize for UI efficiency (e.g., 800px width)
+                # This is crucial: don't send 20MP images to the UI event loop 5 times a second!
+                img.thumbnail((800, 600))
+                
+                # Callback to update UI
+                callback(self.camera_id, img)
+                
+                # Limit FPS (e.g., Target 5 FPS = 0.2s)
+                elapsed = time.time() - start_time
+                sleep_time = max(0.0, 0.2 - elapsed)
+                time.sleep(sleep_time)
+                
+            except Exception as e:
+                logger.error(f"Preview loop error: {e}")
+                time.sleep(1)

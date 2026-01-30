@@ -2,7 +2,7 @@ import threading
 import time
 import queue
 from concurrent.futures import ThreadPoolExecutor
-from config import CAMERA_COUNT, LOCAL_TEMP_BUFFER, USE_REAL_CAMERA, CAMERA_IPS
+from config import CAMERA_COUNT, LOCAL_TEMP_BUFFER, USE_REAL_CAMERA, CAMERA_IPS, RESIZE_RATIO
 from hardware.mock_camera import MockCamera
 from hardware.hik_camera import HikCamera
 from services.file_service import FileService
@@ -117,6 +117,23 @@ class CaptureManager:
 
     def _save_and_queue(self, index, img, batch_id):
         from config import JPEG_QUALITY
+        
+        # Apply Resizing if needed
+        if RESIZE_RATIO < 100:
+             try:
+                # Calculate new size
+                w, h = img.size
+                new_w = int(w * (RESIZE_RATIO / 100.0))
+                new_h = int(h * (RESIZE_RATIO / 100.0))
+                logger.debug(f"Resizing Cam {index+1} from {w}x{h} to {new_w}x{new_h} ({RESIZE_RATIO}%)")
+                
+                # Use PIL's resize for better quality control than thumbnail in this context
+                # (LANCZOS is good for downsampling)
+                from PIL import Image
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+             except Exception as e:
+                logger.error(f"Resize failed for Cam {index+1}: {e}")
+
         filename = f"CAM{index+1}_{batch_id}.jpg"
         saved_path = FileService.save_image(img, LOCAL_TEMP_BUFFER, filename, quality=JPEG_QUALITY)
         
@@ -129,7 +146,33 @@ class CaptureManager:
             if self.update_cam_status_callback:
                 self.update_cam_status_callback(index, 4) # Save Error
 
+    def start_preview(self):
+        """
+        Start live preview for all connected cameras.
+        """
+        logger.info("Starting live preview for all cameras...")
+        
+        def preview_callback(cam_id, img):
+            # Map camera_id (1-based) to index (0-based) for UI callback
+            if self.update_cam_image_callback:
+                idx = cam_id - 1
+                self.update_cam_image_callback(idx, img)
+
+        for cam in self.cameras:
+            if isinstance(cam, HikCamera): # Or MockCamera if it supported streaming
+                cam.start_streaming(preview_callback)
+
+    def stop_preview(self):
+        """
+        Stop live preview for all cameras.
+        """
+        logger.info("Stopping live preview...")
+        for cam in self.cameras:
+            if hasattr(cam, 'stop_streaming'): # Safety check
+                cam.stop_streaming()
+
     def shutdown(self):
+        self.stop_preview()
         for cam in self.cameras:
             cam.disconnect()
         self.executor.shutdown(wait=True)

@@ -10,7 +10,8 @@ DEFAULT_SETTINGS = {
     "camera_count": 5,
     "camera_width": 5472,
     "camera_height": 3648,
-    "jpeg_quality": 95,
+    "resize_ratio": 80, # Percentage (10-100)
+    "jpeg_quality": 80,
     "local_temp_buffer": r"C:\Users\sky.lo\Desktop\AutoPhote\temp_buffer",
     "remote_server_storage": r"T:\0000 資料共用暫存區\測試照片區",
     "camera_ips": {
@@ -44,7 +45,7 @@ def save_settings(new_settings):
 # Load settings immediately
 _current_settings = load_settings()
 
-JPEG_QUALITY = _current_settings.get("jpeg_quality", 95)
+JPEG_QUALITY = _current_settings.get("jpeg_quality", 80)
 
 # Helper to check if drive exists
 def get_valid_path(preferred_path, fallback_name):
@@ -66,6 +67,7 @@ def get_valid_path(preferred_path, fallback_name):
 CAMERA_COUNT = int(_current_settings.get("camera_count", 5))
 CAMERA_WIDTH = int(_current_settings.get("camera_width", 5472))
 CAMERA_HEIGHT = int(_current_settings.get("camera_height", 3648))
+RESIZE_RATIO = int(_current_settings.get("resize_ratio", 80))
 
 # Storage Paths
 LOCAL_TEMP_BUFFER = _current_settings.get("local_temp_buffer", r"C:\Users\sky.lo\Desktop\AutoPhote\temp_buffer")
