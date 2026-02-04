@@ -31,6 +31,7 @@ class DashboardApp:
         self.tk_images = [None] * CAMERA_COUNT 
         self.original_images = [None] * CAMERA_COUNT 
         self.upload_count_var = tk.StringVar(value="Upload Queue: 0")
+        self.sn_var = tk.StringVar()
         
         self.setup_theme()
         self.setup_ui()
@@ -134,6 +135,10 @@ class DashboardApp:
         
         # Monitor Title
         tk.Label(header_frame, text="MONITOR SYSTEM (監控系統)", font=("Segoe UI", 16, "bold"), bg=self.colors["bg"], fg=self.colors["accent"]).pack(side=tk.LEFT, padx=5)
+        
+        # SN Input
+        tk.Label(header_frame, text="SN (機台序號):", font=("Segoe UI", 11, "bold"), bg=self.colors["bg"], fg=self.colors["text"]).pack(side=tk.LEFT, padx=(20, 5))
+        ttk.Entry(header_frame, textvariable=self.sn_var, width=20).pack(side=tk.LEFT, padx=5)
 
         # Exit Button
         tk.Button(header_frame, text="EXIT (離開程式)", bg="#d9534f", fg="white", font=("Segoe UI", 10, "bold"), 
@@ -224,6 +229,9 @@ class DashboardApp:
         if path:
             entry.delete(0, tk.END)
             entry.insert(0, path)
+
+    def get_sn(self):
+        return self.sn_var.get().strip()
 
     def setup_settings_tab(self):
         import config 
