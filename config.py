@@ -12,7 +12,7 @@ DEFAULT_SETTINGS = {
     "camera_height": 3648,
     "resize_ratio": 80, # Percentage (10-100)
     "jpeg_quality": 80,
-    "local_temp_buffer": r"C:\Users\sky.lo\Desktop\AutoPhote\temp_buffer",
+    "local_temp_buffer": r"C:\Users\W00273\Downloads\AutoPhote",
     "remote_server_storage": r"T:\0000 資料共用暫存區\測試照片區",
     "camera_ips": {
         "1": "192.168.1.101",
@@ -70,7 +70,7 @@ CAMERA_HEIGHT = int(_current_settings.get("camera_height", 3648))
 RESIZE_RATIO = int(_current_settings.get("resize_ratio", 80))
 
 # Storage Paths
-LOCAL_TEMP_BUFFER = _current_settings.get("local_temp_buffer", r"C:\Users\sky.lo\Desktop\AutoPhote\temp_buffer")
+LOCAL_TEMP_BUFFER = _current_settings.get("local_temp_buffer", r"C:\Users\W00273\Downloads\AutoPhote")
 REMOTE_SERVER_STORAGE = get_valid_path(_current_settings.get("remote_server_storage", r"T:\0000 資料共用暫存區\測試照片區"), "Server_Storage")
 
 # Camera IP Configuration
@@ -79,7 +79,8 @@ _raw_ips = _current_settings.get("camera_ips", {})
 CAMERA_IPS = {int(k): v for k, v in _raw_ips.items()}
 
 # Hardware Interface Settings
-USE_REAL_CAMERA = True  # Set to True when connecting real cameras
+USE_REAL_CAMERA = True
+#USE_REAL_CAMERA = False  # Set to True when connecting real cameras
 
 # UI Settings
 UI_PREVIEW_WIDTH = 360
