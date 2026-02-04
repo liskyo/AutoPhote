@@ -59,10 +59,14 @@ def main():
 
     def on_snap():
         logger.info("UI: Snap Triggered")
+        if app:
+            capture_mgr.set_sn(app.get_sn())
         capture_mgr.trigger_batch_capture(save_now=False)
 
     def on_confirm():
         logger.info("UI: Confirm Triggered")
+        if app:
+            capture_mgr.set_sn(app.get_sn())
         capture_mgr.confirm_save()
 
     def on_retake():

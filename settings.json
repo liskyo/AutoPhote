@@ -1,0 +1,16 @@
+{
+    "camera_count": 5,
+    "camera_width": 5472,
+    "camera_height": 3648,
+    "resize_ratio": 80,
+    "jpeg_quality": 80,
+    "local_temp_buffer": "C:/Users/W00273/Downloads",
+    "remote_server_storage": "D:\\AutoPhote-main\\Server_Storage",
+    "camera_ips": {
+        "1": "192.168.1.101",
+        "2": "192.168.1.102",
+        "3": "192.168.1.103",
+        "4": "192.168.1.104",
+        "5": "192.168.1.105"
+    }
+}
