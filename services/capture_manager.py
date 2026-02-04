@@ -1,6 +1,7 @@
 import threading
 import time
 import queue
+import os
 from concurrent.futures import ThreadPoolExecutor
 from config import CAMERA_COUNT, LOCAL_TEMP_BUFFER, USE_REAL_CAMERA, CAMERA_IPS, RESIZE_RATIO
 from hardware.mock_camera import MockCamera
@@ -19,6 +20,10 @@ class CaptureManager:
         self.update_cam_status_callback = update_cam_status_callback 
         self.update_cam_image_callback = update_cam_image_callback # callback(cam_idx, pil_image)
         self.pending_captures = {} # {index: pil_image}
+        self.sn_code = ""
+        self.serial_date = ""
+        self.serial_counter = 0
+        self.serial_lock = threading.Lock()
         # Status codes: 0=Disconnected, 1=Connected, 2=Capturing, 3=Done/Success, 4=Error, 5=Reviewing
 
     def initialize_cameras(self):
@@ -47,6 +52,7 @@ class CaptureManager:
         """
         logger.info(f"Trigger received! Batch capture (Save={save_now}).")
         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+        date_str = time.strftime("%Y%m%d")
         self.pending_captures.clear()
         
         futures = []
@@ -54,6 +60,16 @@ class CaptureManager:
             if self.update_cam_status_callback:
                 self.update_cam_status_callback(i, 2) # Capturing
             futures.append(self.executor.submit(self._capture_task, cam, i, timestamp_str, save_now))
+        
+        if save_now:
+            def wait_and_reset():
+                for f in futures:
+                    try:
+                        f.result()
+                    except Exception:
+                        pass
+                self._reset_serial(date_str)
+            threading.Thread(target=wait_and_reset, daemon=True).start()
 
     def _capture_task(self, camera, index, batch_id, save_now):
         try:
@@ -94,6 +110,7 @@ class CaptureManager:
         """
         logger.info("Confirming save for pending captures...")
         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+        date_str = time.strftime("%Y%m%d")
         
         # We can run this in parallel too, but simple loop is fine for saving
         for index, img in self.pending_captures.items():
@@ -104,6 +121,7 @@ class CaptureManager:
                 self.update_cam_status_callback(index, 4)
 
         self.pending_captures.clear()
+        self._reset_serial(date_str)
 
     def discard_capture(self):
         """
@@ -114,6 +132,36 @@ class CaptureManager:
         for i in range(len(self.cameras)):
              if self.update_cam_status_callback:
                 self.update_cam_status_callback(i, 1) # Reset to Ready
+
+    def set_sn(self, sn_code):
+        self.sn_code = (sn_code or "").strip()
+
+    def _reset_serial(self, date_str):
+        with self.serial_lock:
+            self.serial_date = date_str
+            self.serial_counter = 0
+
+    def _get_sn_and_folder(self):
+        date_str = time.strftime("%Y%m%d")
+        sn = self.sn_code.strip() if self.sn_code else "UNKNOWN"
+        folder_name = f"{sn}_{date_str}"
+        folder_path = os.path.join(LOCAL_TEMP_BUFFER, folder_name)
+        return sn, date_str, folder_path
+
+    def _next_filename(self, sn, date_str, folder_path):
+        FileService.ensure_directory(folder_path)
+        with self.serial_lock:
+            if self.serial_date != date_str:
+                self.serial_date = date_str
+                self.serial_counter = 0
+            serial = self.serial_counter + 1
+            while True:
+                filename = f"{sn}_{date_str}_{serial:03d}.jpg"
+                filepath = os.path.join(folder_path, filename)
+                if not os.path.exists(filepath):
+                    self.serial_counter = serial
+                    return filename
+                serial += 1
 
     def _save_and_queue(self, index, img, batch_id):
         from config import JPEG_QUALITY
@@ -134,8 +182,9 @@ class CaptureManager:
              except Exception as e:
                 logger.error(f"Resize failed for Cam {index+1}: {e}")
 
-        filename = f"CAM{index+1}_{batch_id}.jpg"
-        saved_path = FileService.save_image(img, LOCAL_TEMP_BUFFER, filename, quality=JPEG_QUALITY)
+        sn, date_str, folder_path = self._get_sn_and_folder()
+        filename = self._next_filename(sn, date_str, folder_path)
+        saved_path = FileService.save_image(img, folder_path, filename, quality=JPEG_QUALITY)
         
         if saved_path:
             self.upload_queue.put(saved_path)
